@@ -8,6 +8,15 @@ set -e
 
 PG_CONFIG_DIR=/etc/pgbouncer
 
+# $1 is username, $2 is password
+hash_password () {
+  if [ "$AUTH_TYPE" == "plain" ] || [ "$AUTH_TYPE" == "scram-sha-256" ]; then
+    pass="$2"
+  else
+    pass="md5$(echo -n "$2$1" | md5sum | cut -f 1 -d ' ')"
+  fi
+}
+
 if [ -n "$DATABASE_URL" ]; then
   # Thanks to https://stackoverflow.com/a/17287984/146289
 
@@ -48,13 +57,24 @@ if [ ! -e "${_AUTH_FILE}" ]; then
 fi
 
 if [ -n "$DB_USER" -a -n "$DB_PASSWORD" -a -e "${_AUTH_FILE}" ] && ! grep -q "^\"$DB_USER\"" "${_AUTH_FILE}"; then
-  if [ "$AUTH_TYPE" == "plain" ] || [ "$AUTH_TYPE" == "scram-sha-256" ]; then
-     pass="$DB_PASSWORD"
-  else
-     pass="md5$(echo -n "$DB_PASSWORD$DB_USER" | md5sum | cut -f 1 -d ' ')"
-  fi
+  hash_password $DB_USER $DB_PASSWORD
   echo "\"$DB_USER\" \"$pass\"" >> ${PG_CONFIG_DIR}/userlist.txt
   echo "Wrote authentication credentials to ${PG_CONFIG_DIR}/userlist.txt"
+fi
+
+# If additional users are specified in the userlist env variable, add them
+# to the userlist.txt auth file.
+if [ -n "$USERLIST" ]; then
+  # Separate userlist by newlines instead of semi colons for while loop
+  userlines=$(echo $USERLIST | tr ";" "\n")
+  while IFS= read -r line; do
+    # Split into separate curr_user and curr_pass by comma delimiter
+    IFS=, read -r curr_user curr_pass <<< "$line"
+
+    # Hash the pass and append to userlist.txt
+    hash_password $curr_user $curr_pass
+    echo "\"$curr_user\" \"$pass\"" >> ${PG_CONFIG_DIR}/userlist.txt
+  done <<< "$userlines"
 fi
 
 if [ ! -f ${PG_CONFIG_DIR}/pgbouncer.ini ]; then
