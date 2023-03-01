@@ -67,14 +67,16 @@ fi
 if [ -n "$USERLIST" ]; then
   # Separate userlist by newlines instead of semi colons for while loop
   userlines=$(echo $USERLIST | tr ";" "\n")
-  while IFS= read -r line; do
+  echo "$userlines" | while IFS=\n read -r line; do
     # Split into separate curr_user and curr_pass by comma delimiter
-    IFS=, read -r curr_user curr_pass <<< "$line"
+    curr_user=${line%,*}
+    curr_pass=${line#*,}
 
     # Hash the pass and append to userlist.txt
     hash_password $curr_user $curr_pass
     echo "\"$curr_user\" \"$pass\"" >> ${PG_CONFIG_DIR}/userlist.txt
-  done <<< "$userlines"
+    echo "Added user ${curr_user} to userlist.txt"
+  done
 fi
 
 if [ ! -f ${PG_CONFIG_DIR}/pgbouncer.ini ]; then
